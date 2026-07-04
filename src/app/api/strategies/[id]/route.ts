@@ -8,7 +8,14 @@ export async function GET(
   const { id } = await params;
   const supabase = await supabaseServer();
 
-  const { data, error } = await supabase
+  if (!supabase) {
+    return NextResponse.json({
+      strategy: null,
+      note: "Supabase not configured",
+    });
+  }
+
+  const { data, error } = await supabase!
     .from("strategies")
     .select("*, strategy_uploads(*), strategy_signals(*)")
     .eq("id", id)
@@ -17,7 +24,7 @@ export async function GET(
   if (error) {
     return NextResponse.json(
       { error: error.message },
-      { status: 500 }
+      { status: 200 }
     );
   }
 

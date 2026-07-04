@@ -5,7 +5,15 @@ import { parseStrategy } from "@/lib/parsers/strategy-parser";
 export async function GET() {
   const supabase = await supabaseServer();
 
-  const { data, error } = await supabase
+  // Supabase not wired — return empty list gracefully
+  if (!supabase) {
+    return NextResponse.json({
+      strategies: [],
+      note: "Supabase not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    });
+  }
+
+  const { data, error } = await supabase!
     .from("strategies")
     .select("*")
     .order("created_at", { ascending: false })
@@ -14,7 +22,7 @@ export async function GET() {
   if (error) {
     return NextResponse.json(
       { error: error.message, strategies: [] },
-      { status: 500 }
+      { status: 200 }
     );
   }
 
@@ -42,11 +50,7 @@ export async function POST(req: NextRequest) {
       const file_type =
         file.name.split(".").pop()?.toUpperCase() || "TXT";
 
-      const parsed = await parseStrategy(
-        content,
-        file_type,
-        file.name,
-      );
+      const parsed = await parseStrategy(content, file_type, file.name);
 
       if (!parsed.success) {
         return NextResponse.json(
@@ -55,9 +59,29 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // If Supabase not wired, return parsed result without saving
+      if (!supabase) {
+        return NextResponse.json(
+          {
+            strategy: {
+              id: "unsaved",
+              name: parsed.definition!.name || file.name,
+              strategy_type: parsed.definition!.type,
+              strategy_definition: parsed.definition,
+              created_at: new Date().toISOString(),
+            },
+            warnings: [
+              ...(parsed.warnings || []),
+              "⚠️ Supabase not configured — strategy parsed but not persisted",
+            ],
+          },
+          { status: 200 }
+        );
+      }
+
       const def = parsed.definition!;
 
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from("strategies")
         .insert({
           name: def.name || file.name,
@@ -74,12 +98,11 @@ export async function POST(req: NextRequest) {
       if (error) {
         return NextResponse.json(
           { error: error.message },
-          { status: 500 }
+          { status: 200 }
         );
       }
 
-      // Also insert upload record
-      await supabase.from("strategy_uploads").insert({
+      await supabase!.from("strategy_uploads").insert({
         strategy_id: data.id,
         file_type,
         source_file: file.name,
@@ -88,10 +111,7 @@ export async function POST(req: NextRequest) {
       });
 
       return NextResponse.json(
-        {
-          strategy: data,
-          warnings: parsed.warnings,
-        },
+        { strategy: data, warnings: parsed.warnings },
         { status: 201 }
       );
     } catch (err: any) {
@@ -102,7 +122,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Handle JSON body upload (programmatic) ──
+  // ── Handle JSON body upload ──
   try {
     const body = await req.json();
 
@@ -113,7 +133,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    if (!supabase) {
+      return NextResponse.json(
+        {
+          strategy: {
+            id: "unsaved",
+            name: body.name,
+            strategy_type: body.strategy_type || "HYBRID",
+          },
+          note: "Supabase not configured",
+        },
+        { status: 200 }
+      );
+    }
+
+    const { data, error } = await supabase!
       .from("strategies")
       .insert({
         name: body.name,
@@ -130,7 +164,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       return NextResponse.json(
         { error: error.message },
-        { status: 500 }
+        { status: 200 }
       );
     }
 
