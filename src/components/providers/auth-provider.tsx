@@ -22,12 +22,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   // Build the browser-side Supabase client once.
-  const supabase = typeof window !== "undefined"
-    ? createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
-    : null;
+  // Guard against placeholder env — don't crash the app if Supabase
+  // isn't wired yet (the dashboard still renders without auth).
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase =
+    typeof window !== "undefined" &&
+    supabaseUrl &&
+    supabaseKey &&
+    !supabaseUrl.startsWith("placeholder")
+      ? createBrowserClient(supabaseUrl, supabaseKey)
+      : null;
 
   useEffect(() => {
     if (!supabase) return;

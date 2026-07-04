@@ -10,7 +10,6 @@ import {
   Newspaper,
   BrainCircuit,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 
 /**
@@ -85,11 +84,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
               className="relative flex flex-1 flex-col items-center gap-0.5 py-1.5"
             >
               {active && (
-                <motion.span
-                  layoutId="navglow"
-                  className="absolute inset-0 rounded-2xl glow-cyan"
-                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                />
+                <span className="absolute inset-0 rounded-2xl glass-card glow-cyan" aria-hidden="true" />
               )}
               <Icon
                 size={20}
