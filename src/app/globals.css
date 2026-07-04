@@ -1,0 +1,84 @@
+/** Tailwind v4 entry — theme tokens for Aether Terminal. */
+@import "tailwindcss";
+
+@theme {
+  /* Custom xs breakpoint — 480px — for early 2-col grid promotion on large phones */
+  --breakpoint-xs: 480px;
+  /* ss breakpoint for tiny landscape / small phones */
+  --breakpoint-ss: 360px;
+
+  /* Brand palette — institutional deep blue + emerald + neon cyan */
+  --color-ink-50:  #f4f7fb;
+  --color-ink-100: #e6edf6;
+  --color-ink-700: #1a2540;
+  --color-ink-800: #121c33;
+  --color-ink-900: #0a1024;
+  --color-ink-950: #060a18;
+
+  --color-emerald: #10b981;
+  --color-cyan:    #22d3ee;
+  --color-bull:    #22c55e;
+  --color-bear:    #ef4444;
+  --color-neutral: #94a3b8;
+
+  /* Mobile-first font stack tuned for AMOLED legibility */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+}
+
+/* Glassmorphism primitives ------------------------------------------------ */
+.glass {
+  background: rgba(18, 28, 51, 0.55);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  border-radius: 1rem;
+  background: linear-gradient(160deg, rgba(26, 37, 64, 0.7) 0%, rgba(10, 16, 36, 0.7) 100%);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.glass-nav {
+  background: rgba(10, 16, 36, 0.75);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Active tab glow — 120Hz-capable transform-only animation */
+.glow-cyan {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.6), 0 0 20px rgba(34, 211, 238, 0.25);
+}
+
+/* Scrollbar hygiene */
+html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+body {
+  background: radial-gradient(ellipse at 20% -10%, rgba(34, 211, 238, 0.08), transparent 50%),
+              radial-gradient(ellipse at 80% 110%, rgba(16, 185, 129, 0.08), transparent 50%),
+              var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  /* Prevent rubber-band / horizontal scroll on mobile */
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+/* Hide native scrollbar but keep scroll — mobile clean look */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Safe-area padding helpers (notch / gesture bar) */
+.safe-top    { padding-top:    env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Tabular numbers everywhere a number lives */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

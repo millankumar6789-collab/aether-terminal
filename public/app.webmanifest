@@ -1,0 +1,11 @@
+{
+  "name": "Aether Terminal",
+  "short_name": "Aether",
+  "description": "Institutional AI trading platform — mobile-first, cloud-native",
+  "start_url": "/dashboard",
+  "orientation": "portrait",
+  "display": "standalone",
+  "background_color": "#060a18",
+  "theme_color": "#060a18",
+  "icons": []
+}
