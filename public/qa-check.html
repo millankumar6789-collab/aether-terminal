@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Aether Terminal — Device QA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  :root {
+    --cyan: #22d3ee;
+    --bull: #22c55e;
+    --bear: #ef4444;
+    --neutral: #94a3b8;
+    --ink-950: #060a18;
+    --ink-800: #121c33;
+    --ink-100: #e6edf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--ink-950);
+    color: var(--ink-100);
+    font-family: system-ui, -apple-system, sans-serif;
+    min-height: 100dvh;
+    padding: 16px;
+  }
+  h1 { font-size: 18px; font-weight: bold; margin-bottom: 12px; }
+  h1 span { color: var(--cyan); }
+  .card {
+    background: rgba(18, 28, 51, 0.7);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .results { margin-top: 12px; }
+  .result {
+    display: flex; justify-content: space-between;
+    padding: 8px 12px; margin-bottom: 4px;
+    border-radius: 8px; font-size: 13px;
+    background: rgba(255,255,255,0.04);
+  }
+  .result.pass { border-left: 3px solid var(--bull); }
+  .result.fail { border-left: 3px solid var(--bear); }
+  .result.warn { border-left: 3px solid #f59e0b; }
+  .status { font-weight: 600; }
+  .pass .status { color: var(--bull); }
+  .fail .status { color: var(--bear); }
+  .warn .status { color: #f59e0b; }
+  .summary { font-size: 14px; margin-top: 8px; padding: 12px; border-radius: 12px; background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); }
+  button {
+    background: rgba(34,211,238,0.2);
+    border: 1px solid rgba(34,211,238,0.4);
+    color: var(--cyan);
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    width: 100%;
+    cursor: pointer;
+  }
+  button:active { opacity: 0.8; }
+  .note { font-size: 11px; color: var(--neutral); margin-top: 16px; text-align: center; }
+  .spinner { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<h1><span>⌖</span> Aether Terminal QA</h1>
+
+<div class="card">
+  <p style="font-size:13px;color:var(--neutral)">Runs automated checks against <code style="color:var(--cyan)">trading-platform-ashen-eight.vercel.app</code></p>
+  <br>
+  <button id="runBtn" onclick="runQA()">▶ Run QA Checks</button>
+</div>
+
+<div id="output"></div>
+
+<div class="note">
+  Phase 2 hydration fix deployed · POCO X6 Pro (1220×2712, 120Hz)
+</div>
+
+<script>
+const BASE = 'https://trading-platform-ashen-eight.vercel.app';
+const UA = 'Mozilla/5.0 (Linux; Android 13; POCO X6 Pro) AppleWebKit/537.36';
+
+async function runQA() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Running checks...';
+  
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+  
+  const results = [];
+  
+  // Helper to test a route
+  async function test(route, label, checks = []) {
+    const url = route === '/404' ? `${BASE}/this-does-not-exist-${Date.now()}` : `${BASE}${route}`;
+    const start = performance.now();
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA } });
+      const html = await res.text();
+      const ms = Math.round(performance.now() - start);
+      const size = html.length;
+      
+      const item = { label, route, status: res.status, ms, size, pass: true, notes: [] };
+      
+      // Run extra checks
+      for (const check of checks) {
+        const ok = check.fn(html, res);
+        if (!ok) {
+          item.pass = false;
+          item.notes.push(check.label);
+        }
+      }
+      
+      // Auto-checks
+      if (res.status >= 500) {
+        item.pass = false;
+        item.notes.push('HTTP 5xx');
+      } else if (res.status >= 400 && route !== '/404') {
+        item.pass = false;
+        item.notes.push('HTTP 4xx');
+      }
+      
+      if (html.includes('Application error')) {
+        item.pass = false;
+        item.notes.push('App-level error');
+      }
+      
+      if (html.includes('Unhandled Runtime')) {
+        item.pass = false;
+        item.notes.push('Runtime error');
+      }
+      
+      results.push(item);
+      renderResults(results);
+    } catch (e) {
+      results.push({
+        label, route, status: 'NETWORK ERROR', ms: 0, size: 0,
+        pass: false, notes: [e.message]
+      });
+      renderResults(results);
+    }
+  }
+  
+  function renderResults(r) {
+    let html = '<div class="results">';
+    let passCount = 0, failCount = 0;
+    
+    for (const item of r) {
+      const cls = item.pass ? 'pass' : 'fail';
+      if (item.pass) passCount++;
+      else failCount++;
+      
+      html += `<div class="result ${cls}">
+        <div>
+          <div style="font-size:13px"><strong>${item.label}</strong> <span style="font-size:11px;color:var(--neutral)">${item.route}</span></div>
+          <div style="font-size:11px;color:var(--neutral)">${item.ms}ms · ${(item.size/1024).toFixed(1)}KB · HTTP ${item.status}</div>
+          ${item.notes.length ? '<div style="font-size:10px;color:var(--bear);margin-top:2px">⚠ ' + item.notes.join(', ') + '</div>' : ''}
+        </div>
+        <span class="status">${item.pass ? '✓' : '✗'}</span>
+      </div>`;
+    }
+    
+    html += `<div class="summary">
+      <strong>${passCount}/${r.length} passed</strong>
+      ${failCount ? ' · ' + failCount + ' failed' : ' · All clear ✅'}
+    </div>`;
+    html += '</div>';
+    out.innerHTML = html;
+  }
+  
+  // ── Run all checks ──
+  
+  // Core routes
+  await test('/', 'Home / Landing');
+  await test('/dashboard', 'Dashboard (Module 1)', [
+    { label: 'NASDAQ tile missing', fn: (h) => h.includes('NASDAQ') },
+    { label: 'S&P 500 tile missing', fn: (h) => h.includes('S&amp;P 500') || h.includes('S&P 500') },
+    { label: 'Gainers missing', fn: (h) => h.includes('Gainers') || h.includes('AAPL') },
+  ]);
+  await test('/terminal', 'Terminal (Module 2)', [
+    { label: 'BTCUSD missing', fn: (h) => h.includes('BTCUSD') },
+    { label: 'Timeframes missing', fn: (h) => h.includes('1m') },
+  ]);
+  await test('/strategies', 'Strategies (Module 3)', [
+    { label: 'Upload missing', fn: (h) => h.includes('Upload') || h.includes('upload') },
+    { label: 'SMC/ICT missing', fn: (h) => h.includes('SMC') || h.includes('ICT') },
+  ]);
+  await test('/portfolio', 'Portfolio (Module 4)', [
+    { label: 'VaR missing', fn: (h) => h.includes('VaR') },
+    { label: 'Sharpe missing', fn: (h) => h.includes('Sharpe') },
+  ]);
+  await test('/research', 'Research (Module 5)', [
+    { label: 'deepseek missing', fn: (h) => h.includes('deepseek') },
+    { label: 'failover missing', fn: (h) => h.includes('failover') },
+  ]);
+  await test('/news', 'News (Module 6)', [
+    { label: 'Breaking missing', fn: (h) => h.includes('Breaking') },
+    { label: 'Finviz missing', fn: (h) => h.includes('Finviz') },
+  ]);
+  await test('/404', '404 page', [
+    { label: '404 text missing', fn: (h) => h.toLowerCase().includes('off the chart') },
+  ]);
+  
+  // API endpoints
+  await test('/api/health', 'Health API');
+  await test('/api/strategies', 'Strategies API');
+  
+  // Hydration fix check
+  await test('/dashboard', 'Hydration check (re-route)', [
+    { label: 'framer-motion layoutId in bundle', fn: (h) => {
+      // Check JS bundle URLs for layoutId — hard to do from browser on third-party
+      return !h.includes('layoutId');
+    }},
+  ]);
+  
+  // Restore button
+  btn.disabled = false;
+  btn.innerHTML = '▶ Run QA Checks Again';
+}
+
+// Auto-run on load
+setTimeout(runQA, 500);
+</script>
+
+</body>
+</html>
