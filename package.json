@@ -6,7 +6,8 @@
     "dev": "node node_modules/next/dist/bin/next dev --webpack",
     "build": "NAPI_RS_FORCE_WASI=true node node_modules/next/dist/bin/next build --webpack",
     "start": "node node_modules/next/dist/bin/next start",
-    "lint": "node node_modules/next/dist/bin/next lint"
+    "lint": "node node_modules/next/dist/bin/next lint",
+    "vercel-build": "next build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
