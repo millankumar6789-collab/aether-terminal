@@ -67,10 +67,11 @@ async function runTests() {
   try {
     const r = await fetch('https://trading-platform-ashen-eight.vercel.app/terminal');
     const html = await r.text();
+    const h = html.toLowerCase();
     const checks = [
-      'lightweight' in html.toLowerCase(),
-      'btcusdt' in html.toLowerCase(),
-      'Loading chart' in html,
+      h.includes('lightweight'),
+      h.includes('btcusdt'),
+      h.includes('loading chart'),
       html.length > 10000,
     ];
     results.push({

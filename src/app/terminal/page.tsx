@@ -2,13 +2,13 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { GlassCard, Pill } from "@/components/ui/glass";
-import { loadChart } from "@/components/charts";
+import { createChart, ColorType } from "lightweight-charts";
 
 /* ──────────────────────────────────────────────────────────────────────────
- * MODULE 2 — TRADING TERMINAL (Live edition)
+ * MODULE 2 — TRADING TERMINAL (Direct chart — no lazy load)
  *
- * Real-time TradingView chart via Binance WebSocket.
- * Client-side lazy-load via loadChart() barrel — forces Turbopack bundling.
+ * lightweight-charts imported STATICALLY — chart renders immediately.
+ * All chart logic inlined here. No dynamic import, no barrel, no lazy load.
  * ────────────────────────────────────────────────────────────────────────── */
 
 const SYMBOLS = [
@@ -30,73 +30,165 @@ const TIMEFRAMES = [
   { id: "1W",  label: "1W" },
 ] as const;
 
-// Lazy-load chart component (client only)
-let LiveChartComponent: any = null;
+const TRADINGVIEW_INTERVAL: Record<string, string> = {
+  "1m": "1", "5m": "5", "15m": "15", "1h": "60",
+  "4h": "240", "1D": "1d", "1W": "1w", "1M": "1M",
+};
 
-function ChartShell({ symbol, timeframe, chartKey }: {
-  symbol: string;
-  timeframe: string;
-  chartKey: number;
-}) {
-  const [ChartComp, setChartComp] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+function InlineChart({ symbol, timeframe }: { symbol: string; timeframe: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<"loading" | "error" | "live">("loading");
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-    loadChart()
-      .then((mod) => {
-        if (!cancelled) setChartComp(() => mod.default);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message || "Chart failed to load");
-      });
-    return () => { cancelled = true; };
-  }, []);
+    const container = containerRef.current;
+    if (!container) return;
+    let active = true;
 
-  if (error) {
-    return (
-      <GlassCard className="aspect-[4/3] flex flex-col items-center justify-center">
-        <div className="text-sm text-bear">Chart error</div>
-        <div className="text-[11px] text-neutral mt-1">{error}</div>
-      </GlassCard>
-    );
-  }
+    (async () => {
+      try {
+        // 1. Create chart
+        const chart = createChart(container, {
+          width: container.clientWidth,
+          height: 420,
+          layout: {
+            background: { type: ColorType.Solid, color: "transparent" },
+            textColor: "#94a3b8",
+          },
+          grid: {
+            vertLines: { color: "rgba(255,255,255,0.04)" },
+            horzLines: { color: "rgba(255,255,255,0.04)" },
+          },
+          crosshair: { mode: 0 },
+          timeScale: {
+            borderColor: "rgba(255,255,255,0.06)",
+            timeVisible: true,
+          },
+        });
 
-  if (!ChartComp) {
-    return (
-      <GlassCard className="aspect-[4/3] flex flex-col items-center justify-center">
-        <div className="text-4xl opacity-40">📈</div>
-        <div className="mt-2 text-sm font-semibold">Loading chart…</div>
-      </GlassCard>
-    );
-  }
+        if (!active) { chart.remove(); return; }
+
+        // 2. Add candlestick series
+        const series = (chart as any).addCandlestickSeries({
+          upColor: "#22c55e",
+          downColor: "#ef4444",
+          borderDownColor: "#ef4444",
+          borderUpColor: "#22c55e",
+          wickDownColor: "#ef4444",
+          wickUpColor: "#22c55e",
+        });
+
+        // 3. Fetch initial candles
+        const tf = TRADINGVIEW_INTERVAL[timeframe] || "1h";
+        const res = await fetch(
+          `https://api.binance.com/api/v3/klines?symbol=${symbol.toUpperCase()}&interval=${tf}&limit=100`
+        );
+        const raw = await res.json();
+        
+        if (!Array.isArray(raw) || !raw.length) {
+          if (active) { setStatus("error"); setErrorMsg("No candle data"); chart.remove(); }
+          return;
+        }
+
+        const data = raw.map((k: any[]) => ({
+          time: Math.floor(k[0] / 1000),
+          open: parseFloat(k[1]),
+          high: parseFloat(k[2]),
+          low: parseFloat(k[3]),
+          close: parseFloat(k[4]),
+        }));
+
+        if (active) {
+          series.setData(data);
+          chart.timeScale().fitContent();
+          setStatus("live");
+        }
+
+        // 4. WebSocket for live updates
+        const ws = new WebSocket(
+          `wss://stream.binance.com:9443/ws/${symbol}@kline_${tf}`
+        );
+        ws.onmessage = (e) => {
+          if (!active) return;
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg?.e !== "kline") return;
+            const k = msg.k;
+            series.update({
+              time: Math.floor(k.t / 1000),
+              open: parseFloat(k.o),
+              high: parseFloat(k.h),
+              low: parseFloat(k.l),
+              close: parseFloat(k.c),
+            });
+          } catch {}
+        };
+
+        // Cleanup
+        return () => {
+          active = false;
+          ws.close();
+          chart.remove();
+        };
+      } catch (err: any) {
+        if (active) {
+          setStatus("error");
+          setErrorMsg(err?.message || "Chart init failed");
+        }
+      }
+    })();
+
+    // Resize handler
+    const onResize = () => {
+      const c = containerRef.current;
+      if (c) {
+        // chart resize handled by lightweight-charts internally
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => { window.removeEventListener("resize", onResize); };
+  }, [symbol, timeframe]);
 
   return (
-    <GlassCard className="overflow-hidden p-0">
-      <ChartComp
-        key={chartKey}
-        symbol={symbol}
-        timeframe={timeframe}
-        height={420}
+    <div className="relative">
+      {status === "loading" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-ink-950/60 z-10 rounded-xl">
+          <div className="text-center">
+            <div className="text-4xl opacity-40">📈</div>
+            <div className="mt-2 text-sm font-semibold">Loading chart…</div>
+            <div className="text-[11px] text-neutral mt-1">
+              Fetching {symbol.toUpperCase()} candles…
+            </div>
+          </div>
+        </div>
+      )}
+      {status === "error" && (
+        <div className="flex items-center justify-center" style={{height:420}}>
+          <div className="text-center">
+            <div className="text-sm text-bear">Chart error</div>
+            <div className="text-[11px] text-neutral mt-1 max-w-[280px]">{errorMsg}</div>
+          </div>
+        </div>
+      )}
+      {status === "live" && (
+        <div className="absolute top-2 right-2 z-10">
+          <span className="text-[10px] text-green-400 bg-ink-950/80 rounded-full px-2 py-0.5">
+            ● Live
+          </span>
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        className="w-full rounded-xl overflow-hidden"
+        style={{ height: status === "error" ? 420 : undefined, minHeight: status === "loading" ? 420 : undefined }}
       />
-    </GlassCard>
+    </div>
   );
 }
 
 export default function TerminalPage() {
   const [symbol, setSymbol] = useState("btcusdt");
   const [timeframe, setTimeframe] = useState("1D");
-  const [chartKey, setChartKey] = useState(0);
-
-  const handleSymbolChange = useCallback((s: string) => {
-    setSymbol(s);
-    setChartKey((k) => k + 1);
-  }, []);
-
-  const handleTimeframeChange = useCallback((tf: string) => {
-    setTimeframe(tf);
-    setChartKey((k) => k + 1);
-  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -112,7 +204,7 @@ export default function TerminalPage() {
         {SYMBOLS.map((s) => (
           <button
             key={s.id}
-            onClick={() => handleSymbolChange(s.id)}
+            onClick={() => setSymbol(s.id)}
             className={
               "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors " +
               (s.id === symbol
@@ -125,8 +217,10 @@ export default function TerminalPage() {
         ))}
       </div>
 
-      {/* Live Chart */}
-      <ChartShell symbol={symbol} timeframe={timeframe} chartKey={chartKey} />
+      {/* Live Chart — inlined, no lazy load */}
+      <GlassCard className="overflow-hidden p-0">
+        <InlineChart symbol={symbol} timeframe={timeframe} />
+      </GlassCard>
 
       {/* Timeframe selector */}
       <GlassCard>
@@ -134,7 +228,7 @@ export default function TerminalPage() {
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf.id}
-              onClick={() => handleTimeframeChange(tf.id)}
+              onClick={() => setTimeframe(tf.id)}
               className={
                 "rounded-lg py-2 text-xs font-semibold tabular transition-colors " +
                 (tf.id === timeframe
