@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { GlassCard, Pill } from "@/components/ui/glass";
+import { loadChart } from "@/components/charts";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * MODULE 2 — TRADING TERMINAL (Live edition)
  *
  * Real-time TradingView chart via Binance WebSocket.
- * Client-side only chart render using lightweight-charts.
+ * Client-side lazy-load via loadChart() barrel — forces Turbopack bundling.
  * ────────────────────────────────────────────────────────────────────────── */
 
 const SYMBOLS = [
@@ -42,7 +43,7 @@ function ChartShell({ symbol, timeframe, chartKey }: {
 
   useEffect(() => {
     let cancelled = false;
-    import("@/components/charts/live-chart")
+    loadChart()
       .then((mod) => {
         if (!cancelled) setChartComp(() => mod.default);
       })
