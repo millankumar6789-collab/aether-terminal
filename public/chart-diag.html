@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chart Diagnostic</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { background:#0a1024; color:#e6edf6; font:14px system-ui; padding:16px; }
+.pass { color:#22c55e; } .fail { color:#ef4444; } .warn { color:#f59e0b; }
+.card { background:rgba(18,28,51,0.7); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px; margin-bottom:12px; }
+button { background:rgba(34,211,238,0.2); border:1px solid rgba(34,211,238,0.4); color:#22d3ee; border-radius:12px; padding:12px 24px; font-weight:600; width:100%; }
+</style>
+</head>
+<body>
+
+<h2>⌖ Chart Diagnostic</h2>
+
+<div class="card">
+  <p>Tests: lightweight-charts loading, Binance API reachability, WebSocket connectivity</p>
+  <button onclick="runTests()">Run Diagnostics</button>
+</div>
+
+<div id="results"></div>
+
+<script>
+async function runTests() {
+  const out = document.getElementById('results');
+  out.innerHTML = '<div style="padding:12px">Running...</div>';
+  const results = [];
+  
+  // Test 1: Can we import lightweight-charts?
+  try {
+    const mod = await import('https://trading-platform-ashen-eight.vercel.app/_next/static/chunks/1v45h8bpvg7pu.js');
+    results.push({pass: true, label:'Chart chunk import', detail:'154KB chunk loaded'});
+  } catch(e) {
+    results.push({pass: false, label:'Chart chunk import', detail:e.message.slice(0,80)});
+  }
+  
+  // Test 2: Can we reach Binance REST API?
+  try {
+    const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1');
+    const data = await r.json();
+    if (Array.isArray(data) && data.length) {
+      results.push({pass: true, label:'Binance REST API', detail:`BTC last close: $${parseFloat(data[0][4]).toFixed(2)}`});
+    } else {
+      results.push({pass: false, label:'Binance REST API', detail:'Empty response'});
+    }
+  } catch(e) {
+    results.push({pass: false, label:'Binance REST API', detail:e.message.slice(0,80)});
+  }
+  
+  // Test 3: Can we open Binance WebSocket?
+  try {
+    const ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1h');
+    const opened = await new Promise((resolve, reject) => {
+      ws.onopen = () => resolve(true);
+      ws.onerror = () => reject(new Error('WebSocket error'));
+      setTimeout(() => reject(new Error('WebSocket timeout')), 5000);
+    });
+    ws.close();
+    results.push({pass: true, label:'Binance WebSocket', detail:'Connected successfully'});
+  } catch(e) {
+    results.push({pass: false, label:'Binance WebSocket', detail:e.message.slice(0,80)});
+  }
+  
+  // Test 4: Fetch terminal page and check for chart markers
+  try {
+    const r = await fetch('https://trading-platform-ashen-eight.vercel.app/terminal');
+    const html = await r.text();
+    const checks = [
+      'lightweight' in html.toLowerCase(),
+      'btcusdt' in html.toLowerCase(),
+      'Loading chart' in html,
+      html.length > 10000,
+    ];
+    results.push({
+      pass: checks.every(Boolean),
+      label: 'Terminal page markers',
+      detail: `HTML: ${(html.length/1024).toFixed(1)}KB, chart refs: ${checks.filter(Boolean).length}/4`
+    });
+  } catch(e) {
+    results.push({pass: false, label:'Terminal page fetch', detail:e.message.slice(0,80)});
+  }
+  
+  // Test 5: CORS preflight check
+  try {
+    const r = await fetch('https://trading-platform-ashen-eight.vercel.app/api/health');
+    const json = await r.json();
+    results.push({pass: json.status === 'healthy', label:'API health', detail:JSON.stringify(json)});
+  } catch(e) {
+    results.push({pass: false, label:'API health', detail:e.message.slice(0,80)});
+  }
+  
+  // Render
+  let html = '';
+  let passCount = 0;
+  for (const r of results) {
+    if (r.pass) passCount++;
+    html += `<div style="padding:8px 12px;margin-bottom:4px;border-radius:8px;background:rgba(255,255,255,0.04);border-left:3px solid ${r.pass?'#22c55e':'#ef4444'}">
+      <span class="${r.pass?'pass':'fail'}">${r.pass?'✓':'✗'}</span>
+      <strong>${r.label}</strong>
+      <div style="font-size:12px;color:#94a3b8">${r.detail}</div>
+    </div>`;
+  }
+  html += `<div style="margin-top:12px;padding:12px;border-radius:12px;background:rgba(34,211,238,0.1)">
+    <strong>${passCount}/${results.length} passed</strong>
+    ${passCount === results.length ? ' · All systems operational ✅' : ' · Some issues found'}
+  </div>`;
+  out.innerHTML = html;
+}
+</script>
+
+</body>
+</html>
