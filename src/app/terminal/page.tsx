@@ -1,34 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import dynamic from "next/dynamic";
+import { useState, useCallback, useEffect, Suspense } from "react";
 import { GlassCard, Pill } from "@/components/ui/glass";
-
-// Dynamic import — lightweight-charts is browser-only (canvas)
-const LiveChart = dynamic(() => import("@/components/charts/live-chart"), {
-  ssr: false,
-  loading: () => (
-    <GlassCard className="aspect-[4/3] flex flex-col items-center justify-center">
-      <div className="text-sm text-neutral">Loading chart…</div>
-    </GlassCard>
-  ),
-});
 
 /* ──────────────────────────────────────────────────────────────────────────
  * MODULE 2 — TRADING TERMINAL (Live edition)
  *
- * TradingView Lightweight Charts powered by Binance WebSocket.
- * Symbol selector switches pairs live. Timeframe selector re-fetches candles.
- * Mobile-first — single chart view at 360px, thumb-zone controls.
+ * Real-time TradingView chart via Binance WebSocket.
+ * Client-side only chart render using lightweight-charts.
  * ────────────────────────────────────────────────────────────────────────── */
 
 const SYMBOLS = [
-  { id: "btcusdt",    label: "BTC/USD" },
-  { id: "ethusdt",    label: "ETH/USD" },
-  { id: "solusdt",    label: "SOL/USD" },
-  { id: "bnbusdt",     label: "BNB/USD" },
-  { id: "xrpusdt",     label: "XRP/USD" },
-  { id: "adausdt",     label: "ADA/USD" },
+  { id: "btcusdt",  label: "BTC/USD" },
+  { id: "ethusdt",  label: "ETH/USD" },
+  { id: "solusdt",  label: "SOL/USD" },
+  { id: "bnbusdt",   label: "BNB/USD" },
+  { id: "xrpusdt",   label: "XRP/USD" },
+  { id: "adausdt",   label: "ADA/USD" },
 ];
 
 const TIMEFRAMES = [
@@ -41,26 +29,76 @@ const TIMEFRAMES = [
   { id: "1W",  label: "1W" },
 ] as const;
 
+// Lazy-load chart component (client only)
+let LiveChartComponent: any = null;
+
+function ChartShell({ symbol, timeframe, chartKey }: {
+  symbol: string;
+  timeframe: string;
+  chartKey: number;
+}) {
+  const [ChartComp, setChartComp] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("@/components/charts/live-chart")
+      .then((mod) => {
+        if (!cancelled) setChartComp(() => mod.default);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message || "Chart failed to load");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (error) {
+    return (
+      <GlassCard className="aspect-[4/3] flex flex-col items-center justify-center">
+        <div className="text-sm text-bear">Chart error</div>
+        <div className="text-[11px] text-neutral mt-1">{error}</div>
+      </GlassCard>
+    );
+  }
+
+  if (!ChartComp) {
+    return (
+      <GlassCard className="aspect-[4/3] flex flex-col items-center justify-center">
+        <div className="text-4xl opacity-40">📈</div>
+        <div className="mt-2 text-sm font-semibold">Loading chart…</div>
+      </GlassCard>
+    );
+  }
+
+  return (
+    <GlassCard className="overflow-hidden p-0">
+      <ChartComp
+        key={chartKey}
+        symbol={symbol}
+        timeframe={timeframe}
+        height={420}
+      />
+    </GlassCard>
+  );
+}
+
 export default function TerminalPage() {
   const [symbol, setSymbol] = useState("btcusdt");
   const [timeframe, setTimeframe] = useState("1D");
-  const [chartKey, setChartKey] = useState(0); // force remount on tf change
+  const [chartKey, setChartKey] = useState(0);
 
   const handleSymbolChange = useCallback((s: string) => {
     setSymbol(s);
-    // Re-mount chart to fetch new symbol data + new WS stream
     setChartKey((k) => k + 1);
   }, []);
 
   const handleTimeframeChange = useCallback((tf: string) => {
     setTimeframe(tf);
-    // Re-mount chart with new interval
     setChartKey((k) => k + 1);
   }, []);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Header ── */}
       <div>
         <h1 className="text-lg font-bold tracking-tight">Trading Terminal</h1>
         <p className="text-xs text-neutral">
@@ -68,7 +106,7 @@ export default function TerminalPage() {
         </p>
       </div>
 
-      {/* ── Symbol selector chips ── */}
+      {/* Symbol selector */}
       <div className="flex gap-2 overflow-x-auto -mx-1 px-1 no-scrollbar">
         {SYMBOLS.map((s) => (
           <button
@@ -86,17 +124,10 @@ export default function TerminalPage() {
         ))}
       </div>
 
-      {/* ── Live Chart ── */}
-      <GlassCard className="overflow-hidden p-0">
-        <LiveChart
-          key={chartKey}
-          symbol={symbol}
-          timeframe={timeframe}
-          height={420}
-        />
-      </GlassCard>
+      {/* Live Chart */}
+      <ChartShell symbol={symbol} timeframe={timeframe} chartKey={chartKey} />
 
-      {/* ── Timeframe selector ── */}
+      {/* Timeframe selector */}
       <GlassCard>
         <div className="grid grid-cols-4 xs:grid-cols-7 gap-2">
           {TIMEFRAMES.map((tf) => (
@@ -116,7 +147,6 @@ export default function TerminalPage() {
         </div>
       </GlassCard>
 
-      {/* ── Tool indicators ── */}
       <div className="flex flex-wrap gap-2">
         <Pill tone="cyan">Drawing tools</Pill>
         <Pill tone="neutral">DOM</Pill>
@@ -125,7 +155,7 @@ export default function TerminalPage() {
       </div>
 
       <p className="text-center text-[10px] text-green-400/80">
-        ● Live Binance data · TradingView Lightweight Charts · Phase 3 real-time
+        ● Live Binance data · TradingView Lightweight Charts
       </p>
     </div>
   );

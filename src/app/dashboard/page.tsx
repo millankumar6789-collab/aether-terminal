@@ -5,18 +5,12 @@ import { useBinanceTicker, formatPrice, priceTone } from "@/hooks/use-binance-ti
 
 /* ──────────────────────────────────────────────────────────────────────────
  * MODULE 1 — MARKET OVERVIEW (Live edition)
- *
- * Real-time Binance WebSocket ticker data for crypto markets.
- * Falls back to static symbols if Binance is unreachable.
+ * Real-time Binance spot prices + live gainer/loser.
  * ────────────────────────────────────────────────────────────────────────── */
 
 const CRYPTO_SYMBOLS = [
-  "btcusdt", "ethusdt", "solusdt", "bnbusdt", "xrpusdt", "adausdt",
-  "dogeusdt", "avaxusdt",
-];
-
-const FOREX_SYMBOLS = [
-  // Binance doesn't have forex — static for now
+  "btcusdt", "ethusdt", "solusdt", "bnbusdt",
+  "xrpusdt", "adausdt", "dogeusdt", "avaxusdt",
 ];
 
 export default function DashboardPage() {
@@ -33,12 +27,14 @@ export default function DashboardPage() {
   const doge = tickers.get("dogeusdt");
   const avax = tickers.get("avaxusdt");
 
-  // Build gainers/losers from live data
+  // Build gainer/loser from live data
   const all = Array.from(tickers.values()).filter((t) => t.change24hPct !== 0);
   const sorted = [...all].sort((a, b) => b.change24hPct - a.change24hPct);
   const gainers = sorted.filter((t) => t.change24hPct > 0).slice(0, 3);
   const losers = sorted.filter((t) => t.change24hPct < 0).reverse().slice(0, 3);
-  const active = sorted.length >= 3 ? sorted.slice(0, 3) : [];
+  const active = sorted.slice(0, 5);
+
+  const hasLiveData = tickers.size > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,34 +45,43 @@ export default function DashboardPage() {
           {connected && (
             <span className="text-green-400 ml-1">● Live</span>
           )}
+          {!connected && !hasLiveData && (
+            <span className="text-neutral/60 ml-1">· connecting…</span>
+          )}
         </p>
       </div>
 
-      {/* ── Top crypto tiles ── */}
+      {/* ── CRYPTO TILES (primary — live data) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {btc && (
+        {btc ? (
           <StatTile
             label="BTC / USD"
             value={formatPrice("btcusdt", btc.price)}
             delta={`${btc.change24hPct >= 0 ? "+" : ""}${btc.change24hPct.toFixed(2)}%`}
             tone={priceTone(btc.change24hPct)}
           />
+        ) : (
+          <StatTile label="BTC / USD" value="..." delta="loading" tone="neutral" />
         )}
-        {eth && (
+        {eth ? (
           <StatTile
             label="ETH / USD"
             value={formatPrice("ethusdt", eth.price)}
             delta={`${eth.change24hPct >= 0 ? "+" : ""}${eth.change24hPct.toFixed(2)}%`}
             tone={priceTone(eth.change24hPct)}
           />
+        ) : (
+          <StatTile label="ETH / USD" value="..." delta="loading" tone="neutral" />
         )}
-        {sol && (
+        {sol ? (
           <StatTile
             label="SOL / USD"
             value={formatPrice("solusdt", sol.price)}
             delta={`${sol.change24hPct >= 0 ? "+" : ""}${sol.change24hPct.toFixed(2)}%`}
             tone={priceTone(sol.change24hPct)}
           />
+        ) : (
+          <StatTile label="SOL / USD" value="..." delta="loading" tone="neutral" />
         )}
         {bnb && (
           <StatTile
@@ -102,15 +107,10 @@ export default function DashboardPage() {
             tone={priceTone(ada.change24hPct)}
           />
         )}
-        {/* Static indices for now (need Polygon/Alpaca keys for real data) */}
-        <StatTile label="NASDAQ" value="--" delta="(needs API key)" tone="neutral" />
-        <StatTile label="S&P 500" value="--" delta="(needs API key)" tone="neutral" />
-        <StatTile label="EUR/USD" value="--" delta="(needs API key)" tone="neutral" />
-        <StatTile label="XAU/USD" value="--" delta="(needs API key)" tone="neutral" />
       </div>
 
-      {/* ── Gainer / Loser split from live data ── */}
-      {gainers.length > 0 && (
+      {/* ── Gainer / Loser ── */}
+      {gainers.length > 0 && losers.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
           <GlassCard>
             <SectionTitle
@@ -151,10 +151,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Most active (top movers by volume proxy = absolute change) ── */}
+      {/* ── Most Active ── */}
       {active.length > 0 && (
         <GlassCard>
-          <SectionTitle title="Crypto / Most Active" />
+          <SectionTitle title="Most Active" />
           <div className="flex flex-wrap gap-2">
             {active.map((c) => (
               <div
@@ -177,9 +177,24 @@ export default function DashboardPage() {
         </GlassCard>
       )}
 
-      {/* ── Architecture status ── */}
+      {/* ── Indices (static — needs API keys) ── */}
       <GlassCard>
-        <SectionTitle title="Architecture status" />
+        <SectionTitle title="Indices & Forex" action={
+          <Pill tone="neutral">needs API key</Pill>
+        } />
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div><span className="text-neutral">NASDAQ</span><div>--</div></div>
+          <div><span className="text-neutral">S&P 500</span><div>--</div></div>
+          <div><span className="text-neutral">DAX</span><div>--</div></div>
+          <div><span className="text-neutral">EUR/USD</span><div>--</div></div>
+          <div><span className="text-neutral">XAU/USD</span><div>--</div></div>
+          <div><span className="text-neutral">WTI</span><div>--</div></div>
+        </div>
+      </GlassCard>
+
+      {/* ── Architecture ── */}
+      <GlassCard>
+        <SectionTitle title="Architecture" />
         <div className="flex flex-wrap gap-2">
           <Pill tone="cyan">Next.js 16</Pill>
           <Pill tone="bull">Supabase SSR</Pill>
@@ -189,16 +204,10 @@ export default function DashboardPage() {
           <Pill tone="bull">Mobile-first</Pill>
         </div>
         <p className="mt-3 text-xs text-neutral">
-          Live crypto data via Binance public WebSocket. Stock/forex indices need
-          Polygon or Alpaca API keys — plug into <code className="text-cyan">.env.local</code>.
+          Live crypto via Binance public WebSocket. Stock indices need
+          Polygon or Alpaca API keys in <code className="text-cyan">.env.local</code>.
         </p>
       </GlassCard>
-
-      {!connected && tickers.size === 0 && (
-        <p className="text-center text-[10px] text-neutral/60">
-          Connecting to Binance… if this persists, check your network.
-        </p>
-      )}
     </div>
   );
 }
